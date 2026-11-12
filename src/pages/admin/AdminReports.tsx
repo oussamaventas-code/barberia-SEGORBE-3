@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../lib/api';
-import { formatEuro } from '../../types/domain';
+import { formatEuro, WAITLIST_STATUS_LABELS } from '../../types/domain';
 
 interface ReportsData {
   range: { from: string; to: string };
@@ -99,7 +99,7 @@ export default function AdminReports() {
                       {w.preferredDate} · {w.serviceName}
                     </p>
                   </div>
-                  <span className="font-mono-data font-bold text-[#E63B2E]">{w.status}</span>
+                  <span className="font-mono-data font-bold text-[#E63B2E]">{WAITLIST_STATUS_LABELS[w.status] ?? w.status}</span>
                 </div>
               ))}
             </div>

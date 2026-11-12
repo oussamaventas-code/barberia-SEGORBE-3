@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../lib/api';
-import { ServiceItem, StaffMember, formatEuro } from '../../types/domain';
+import { ServiceItem, StaffMember, formatEuro, APPOINTMENT_STATUS_LABELS } from '../../types/domain';
 
 interface AgendaAppt {
   id: number;
@@ -479,7 +479,7 @@ export default function AdminAgenda() {
                           STATUS_BADGE[appt.status] || ''
                         }`}
                       >
-                        {appt.status}
+                        {APPOINTMENT_STATUS_LABELS[appt.status] ?? appt.status}
                       </span>
                       <span className="font-mono-data text-xs tabular-nums text-[#111111]/70">
                         {paidTotal > 0
@@ -536,7 +536,7 @@ export default function AdminAgenda() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-mono-data text-xs text-[#E63B2E]">
-                  {activeAppt.bookingCode} · {activeAppt.status}
+                  {activeAppt.bookingCode} · {APPOINTMENT_STATUS_LABELS[activeAppt.status] ?? activeAppt.status}
                 </p>
                 <h2 className="mt-1 font-display text-2xl font-bold">
                   {activeAppt.customer?.fullName}

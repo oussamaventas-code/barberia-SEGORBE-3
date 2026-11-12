@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { auth, googleAuthProvider } from '../lib/firebase';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
+
+/**
+ * Sesión local de demostración (email + contraseña contra la base de datos local).
+ * El token firmado por el servidor se guarda en localStorage.
+ */
 
 export interface AuthProfile {
   id: number;
@@ -13,88 +16,103 @@ export interface AuthProfile {
 }
 
 interface AuthContextValue {
-  firebaseUser: User | null;
   profile: AuthProfile | null;
+  isAuthenticated: boolean;
   loading: boolean;
   authError: string | null;
   getToken: () => Promise<string | null>;
-  signInWithGoogle: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
+const STORAGE_KEY = 'cs_session_token';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function readToken(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeToken(token: string | null) {
+  try {
+    if (token) localStorage.setItem(STORAGE_KEY, token);
+    else localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // storage unavailable (private mode): session lasts only for this page
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(() => readToken());
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const fetchBackendProfile = async (user: User | null) => {
-    if (!user) {
+  const fetchProfile = useCallback(async (tk: string | null) => {
+    if (!tk) {
       setProfile(null);
       return;
     }
     try {
-      const token = await user.getIdToken();
-      const res = await apiFetch<{ profile: AuthProfile }>('/api/admin/auth/me', { token });
+      const res = await apiFetch<{ profile: AuthProfile }>('/api/admin/auth/me', { token: tk });
       setProfile(res.profile);
       setAuthError(null);
-    } catch (err: any) {
-      setAuthError(err.message || 'No se pudo validar la sesión.');
+    } catch {
+      // Expired or invalid token: clear silently
+      writeToken(null);
+      setToken(null);
       setProfile(null);
     }
-  };
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
-      await fetchBackendProfile(user);
-      setLoading(false);
-    });
-    return () => unsub();
   }, []);
 
-  const getToken = async () => {
-    if (!auth.currentUser) return null;
-    return auth.currentUser.getIdToken();
-  };
+  useEffect(() => {
+    fetchProfile(token).finally(() => setLoading(false));
+    // only on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const signInWithGoogle = async () => {
+  const getToken = useCallback(async () => token, [token]);
+
+  const signIn = async (email: string, password: string) => {
     setAuthError(null);
     try {
-      const cred = await signInWithPopup(auth, googleAuthProvider);
-      await fetchBackendProfile(cred.user);
+      const res = await apiFetch<{ token: string; profile: AuthProfile }>('/api/admin/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      writeToken(res.token);
+      setToken(res.token);
+      setProfile(res.profile);
+      return true;
     } catch (err: any) {
-      const msg =
-        err?.code === 'auth/popup-blocked'
-          ? 'El navegador bloqueó la ventana emergente de Google. Permite las ventanas emergentes para continuar.'
-          : err?.code === 'auth/popup-closed-by-user'
-          ? 'Inicio de sesión cancelado.'
-          : err?.message || 'Error iniciando sesión con Google.';
-      setAuthError(msg);
+      setAuthError(err.message || 'No se pudo iniciar sesión.');
+      return false;
     }
   };
 
   const logout = async () => {
-    await signOut(auth);
+    writeToken(null);
+    setToken(null);
     setProfile(null);
   };
 
   const refreshProfile = async () => {
-    await fetchBackendProfile(auth.currentUser);
+    await fetchProfile(token);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        firebaseUser,
         profile,
+        isAuthenticated: Boolean(profile),
         loading,
         authError,
         getToken,
-        signInWithGoogle,
+        signIn,
         logout,
         refreshProfile,
       }}

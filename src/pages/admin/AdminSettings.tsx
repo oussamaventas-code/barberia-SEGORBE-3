@@ -16,6 +16,9 @@ export default function AdminSettings() {
   const [holidays, setHolidays] = useState<any[]>([]);
   const [userProfiles, setUserProfiles] = useState<any[]>([]);
 
+  const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', role: 'STAFF' });
+  const [userMsg, setUserMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   const [holidayDate, setHolidayDate] = useState('');
   const [holidayReason, setHolidayReason] = useState('');
 
@@ -65,7 +68,7 @@ export default function AdminSettings() {
           isSetupComplete: true,
         }),
       });
-      setSavedMsg('Configuración guardada correctamente en PostgreSQL.');
+      setSavedMsg('Configuración guardada correctamente.');
       await load();
     } catch (err: any) {
       setError(err.message);
@@ -98,13 +101,49 @@ export default function AdminSettings() {
   };
 
   const handleRoleChange = async (id: number, role: string) => {
-    const token = await getToken();
-    await apiFetch(`/api/admin/profiles/${id}/role`, {
-      method: 'PATCH',
-      token,
-      body: JSON.stringify({ role }),
-    });
-    await load();
+    setUserMsg(null);
+    try {
+      const token = await getToken();
+      await apiFetch(`/api/admin/profiles/${id}/role`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({ role }),
+      });
+      await load();
+    } catch (err: any) {
+      setUserMsg({ ok: false, text: err.message });
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserMsg(null);
+    try {
+      const token = await getToken();
+      await apiFetch('/api/admin/profiles', { method: 'POST', token, body: JSON.stringify(newUser) });
+      setUserMsg({ ok: true, text: `Usuario ${newUser.email} creado. Ya puede entrar en /admin.` });
+      setNewUser({ fullName: '', email: '', password: '', role: 'STAFF' });
+      await load();
+    } catch (err: any) {
+      setUserMsg({ ok: false, text: err.message });
+    }
+  };
+
+  const handleResetPassword = async (id: number, email: string) => {
+    const password = window.prompt(`Nueva contraseña para ${email} (mínimo 8 caracteres):`);
+    if (!password) return;
+    setUserMsg(null);
+    try {
+      const token = await getToken();
+      await apiFetch(`/api/admin/profiles/${id}/password`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ password }),
+      });
+      setUserMsg({ ok: true, text: `Contraseña de ${email} actualizada.` });
+    } catch (err: any) {
+      setUserMsg({ ok: false, text: err.message });
+    }
   };
 
   if (loading) {
@@ -431,29 +470,100 @@ export default function AdminSettings() {
         </div>
       </section>
 
-      {/* RBAC Users */}
+      {/* Users & permissions */}
       {profile?.role === 'ADMIN' && (
-        <section className="rounded-[2rem] border border-[#111111]/12 bg-[#F5F3EE] p-6 space-y-3">
-          <h2 className="font-display text-lg font-bold">Usuarios y permisos (RBAC)</h2>
+        <section className="rounded-[2rem] border border-[#111111]/12 bg-[#F5F3EE] p-6 space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-bold">Usuarios del panel</h2>
+            <p className="text-xs text-[#111111]/65">
+              Dirección: acceso total. Equipo: agenda, reservas y clientes (sin cambiar configuración ni catálogo).
+            </p>
+          </div>
+
+          {userMsg && (
+            <div
+              className={`rounded-xl border px-4 py-2.5 text-xs font-medium ${
+                userMsg.ok ? 'border-[#15803D] bg-[#15803D]/10 text-[#15803D]' : 'border-[#E63B2E] bg-[#E63B2E]/10 text-[#E63B2E]'
+              }`}
+            >
+              {userMsg.text}
+            </div>
+          )}
+
           <div className="divide-y divide-[#111111]/10 text-xs">
             {userProfiles.map((u) => (
-              <div key={u.id} className="flex items-center justify-between py-2.5">
+              <div key={u.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-bold">{u.fullName || u.email}</p>
+                  <p className="font-bold">
+                    {u.fullName || u.email}
+                    {u.id === profile.id && <span className="ml-2 font-mono-data text-[10px] text-[#E63B2E]">(tú)</span>}
+                  </p>
                   <p className="font-mono-data text-[#111111]/60">{u.email}</p>
                 </div>
-                <select
-                  value={u.role}
-                  onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                  className="rounded-lg border border-[#111111]/20 bg-white px-3 py-1.5 font-mono-data"
-                >
-                  <option value="ADMIN">ADMIN</option>
-                  <option value="STAFF">STAFF</option>
-                  <option value="CUSTOMER">CUSTOMER</option>
-                </select>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleResetPassword(u.id, u.email)}
+                    className="rounded-lg border border-[#111111]/20 px-3 py-1.5 font-mono-data hover:bg-white"
+                  >
+                    Cambiar contraseña
+                  </button>
+                  <select
+                    value={u.role}
+                    disabled={u.id === profile.id}
+                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                    className="rounded-lg border border-[#111111]/20 bg-white px-3 py-1.5 font-mono-data disabled:opacity-60"
+                    aria-label={`Rol de ${u.email}`}
+                  >
+                    <option value="ADMIN">Dirección</option>
+                    <option value="STAFF">Equipo</option>
+                    <option value="CUSTOMER">Sin acceso</option>
+                  </select>
+                </div>
               </div>
             ))}
           </div>
+
+          <form onSubmit={handleCreateUser} className="grid grid-cols-1 gap-2 border-t border-[#111111]/10 pt-4 sm:grid-cols-5">
+            <input
+              required
+              placeholder="Nombre"
+              value={newUser.fullName}
+              onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+              className="rounded-xl border border-[#111111]/20 bg-white px-3 py-2 text-xs"
+            />
+            <input
+              required
+              type="email"
+              placeholder="email@ejemplo.com"
+              value={newUser.email}
+              onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+              className="rounded-xl border border-[#111111]/20 bg-white px-3 py-2 text-xs"
+            />
+            <input
+              required
+              type="password"
+              minLength={8}
+              placeholder="Contraseña (mín. 8)"
+              value={newUser.password}
+              onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              className="rounded-xl border border-[#111111]/20 bg-white px-3 py-2 text-xs"
+            />
+            <select
+              value={newUser.role}
+              onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+              className="rounded-xl border border-[#111111]/20 bg-white px-3 py-2 text-xs"
+            >
+              <option value="STAFF">Equipo</option>
+              <option value="ADMIN">Dirección</option>
+            </select>
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#111111] px-4 py-2 font-display text-xs font-bold text-[#F5F3EE]"
+            >
+              <Plus className="h-3.5 w-3.5" /> Crear usuario
+            </button>
+          </form>
         </section>
       )}
     </div>

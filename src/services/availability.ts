@@ -1,5 +1,5 @@
 import { and, eq, gt, gte, inArray, isNull, lt, lte, or } from 'drizzle-orm';
-import { db } from '../db/index.ts';
+import { db, type DbExecutor } from '../db/index.ts';
 import {
   appointments,
   blockedSlots,
@@ -65,8 +65,12 @@ export async function getActiveBusinessSettings() {
 /**
  * Resolves effective service duration and price for a given staff member (if any).
  */
-export async function resolveServiceForStaff(serviceIds: number[], staffId?: number) {
-  const svcRows = await db
+export async function resolveServiceForStaff(
+  serviceIds: number[],
+  staffId?: number,
+  exec: DbExecutor = db
+) {
+  const svcRows = await exec
     .select()
     .from(services)
     .where(and(inArray(services.id, serviceIds), isNull(services.deletedAt)));
@@ -83,7 +87,7 @@ export async function resolveServiceForStaff(serviceIds: number[], staffId?: num
 
   let customMap = new Map<number, { customDurationMinutes: number | null; customPriceCents: number | null }>();
   if (staffId) {
-    const ssRows = await db
+    const ssRows = await exec
       .select()
       .from(staffServices)
       .where(and(eq(staffServices.staffId, staffId), inArray(staffServices.serviceId, serviceIds)));
@@ -171,11 +175,12 @@ function computeWindowsFromPreloaded(
  */
 async function getStaffDailyWindows(
   staffId: number,
-  dateStr: string
+  dateStr: string,
+  exec: DbExecutor = db
 ): Promise<Array<{ startMin: number; endMin: number }>> {
   const dayOfWeek = getDayOfWeekMadrid(dateStr);
 
-  const exceptions = await db
+  const exceptions = await exec
     .select()
     .from(staffAvailability)
     .where(
@@ -185,7 +190,7 @@ async function getStaffDailyWindows(
       )
     );
 
-  const staffWh = await db
+  const staffWh = await exec
     .select()
     .from(workingHours)
     .where(and(eq(workingHours.staffId, staffId), eq(workingHours.dayOfWeek, dayOfWeek)))
@@ -194,7 +199,7 @@ async function getStaffDailyWindows(
   const fallbackWh =
     staffWh.length > 0
       ? []
-      : await db
+      : await exec
           .select()
           .from(workingHours)
           .where(and(isNull(workingHours.staffId), eq(workingHours.dayOfWeek, dayOfWeek)))
@@ -575,7 +580,7 @@ export async function getCalendarDaysAvailability(params: {
  * before inserting or rescheduling an appointment.
  */
 export async function assertStaffSlotAvailableInTx(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: DbExecutor,
   params: {
     staffId: number;
     startAtUtc: Date;
@@ -610,7 +615,7 @@ export async function assertStaffSlotAvailableInTx(
   }
 
   if (params.enforceWorkingHours) {
-    const windows = await getStaffDailyWindows(params.staffId, dateStr);
+    const windows = await getStaffDailyWindows(params.staffId, dateStr, tx);
     const fitsWindow = windows.some((w) => {
       const wStart = madridLocalToUtc(dateStr, minutesToTime(w.startMin));
       const wEnd = madridLocalToUtc(dateStr, minutesToTime(w.endMin));
@@ -623,9 +628,10 @@ export async function assertStaffSlotAvailableInTx(
     }
   }
 
-  // Check overlapping appointments with buffer
-  const checkStart = new Date(params.startAtUtc.getTime() - params.bufferMinutes * 60_000);
-  const checkEnd = new Date(endAtUtc.getTime() + params.bufferMinutes * 60_000);
+  // Check overlapping appointments with buffer (the larger of the appointment's own and the business buffer)
+  const bufferMin = Math.max(params.bufferMinutes, settings.bufferMinutes ?? 0);
+  const checkStart = new Date(params.startAtUtc.getTime() - bufferMin * 60_000);
+  const checkEnd = new Date(endAtUtc.getTime() + bufferMin * 60_000);
 
   const overlappingAppts = await tx
     .select()

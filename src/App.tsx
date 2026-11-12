@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { NoiseOverlay } from './components/NoiseOverlay';
@@ -5,20 +6,27 @@ import HomePage from './pages/HomePage';
 import BookingPage from './pages/BookingPage';
 import ClientAreaPage from './pages/ClientAreaPage';
 import LegalPages from './pages/LegalPages';
-import AdminLayout from './pages/admin/AdminLayout';
-import AdminOverview from './pages/admin/AdminOverview';
-import AdminAgenda from './pages/admin/AdminAgenda';
-import AdminBookingsList from './pages/admin/AdminBookingsList';
-import AdminCustomersCrm from './pages/admin/AdminCustomersCrm';
-import AdminCatalogTeam from './pages/admin/AdminCatalogTeam';
-import AdminReports from './pages/admin/AdminReports';
-import AdminSettings from './pages/admin/AdminSettings';
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'));
+const AdminAgenda = lazy(() => import('./pages/admin/AdminAgenda'));
+const AdminBookingsList = lazy(() => import('./pages/admin/AdminBookingsList'));
+const AdminCustomersCrm = lazy(() => import('./pages/admin/AdminCustomersCrm'));
+const AdminCatalogTeam = lazy(() => import('./pages/admin/AdminCatalogTeam'));
+const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <NoiseOverlay />
+        <Suspense
+          fallback={
+            <div className="min-h-screen bg-[#111111] flex items-center justify-center font-mono-data text-xs text-[#E8E4DD]/70">
+              Cargando…
+            </div>
+          }
+        >
         <Routes>
           {/* Public Zone */}
           <Route path="/" element={<HomePage />} />
@@ -49,6 +57,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   );

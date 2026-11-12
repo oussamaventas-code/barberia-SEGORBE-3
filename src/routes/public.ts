@@ -13,6 +13,7 @@ import {
   staff,
   staffServices,
   waitlist,
+  workingHours,
 } from '../db/schema.ts';
 import { ensureSystemBootstrap } from '../services/bootstrap.ts';
 import {
@@ -47,7 +48,7 @@ router.get('/bootstrap', async (_req, res) => {
     if (!bootstrapInFlight) {
       bootstrapInFlight = (async () => {
         await ensureSystemBootstrap();
-        const [settingsRows, serviceRows, activeStaff, ssRows, completedRows, totalRows] =
+        const [settingsRows, serviceRows, activeStaff, ssRows, completedRows, totalRows, hoursRows] =
           await Promise.all([
             db.select().from(businessSettings).limit(1),
             db
@@ -77,6 +78,11 @@ router.get('/bootstrap', async (_req, res) => {
               .select({ count: sql<number>`count(*)::int` })
               .from(appointments)
               .where(inArray(appointments.status, ['CONFIRMED', 'COMPLETED'])),
+            db
+              .select()
+              .from(workingHours)
+              .where(isNull(workingHours.staffId))
+              .orderBy(workingHours.dayOfWeek),
           ]);
 
         const settings = settingsRows[0];
@@ -100,7 +106,15 @@ router.get('/bootstrap', async (_req, res) => {
                 isSetupComplete: settings.isSetupComplete,
               }
             : null,
-          services: serviceRows,
+          services: serviceRows.filter((s) => s.isActive && s.isConfigured),
+          openingHours: hoursRows.map((h) => ({
+            dayOfWeek: h.dayOfWeek,
+            isOpen: h.isOpen,
+            openTime: h.openTime,
+            closeTime: h.closeTime,
+            breakStart: h.breakStart,
+            breakEnd: h.breakEnd,
+          })),
           staff: activeStaff.map((barber) => ({
             ...barber,
             serviceIds: ssRows.filter((ss) => ss.staffId === barber.id).map((ss) => ss.serviceId),
@@ -762,7 +776,7 @@ router.get('/my-data/export', async (req, res) => {
 
     res.json({
       exportedAt: new Date().toISOString(),
-      controller: 'Club Segorbe (Murcia, España)',
+      controller: 'Barbería Segorbe (Murcia, España)',
       customer: {
         publicCode: verified.cust.publicCode,
         fullName: verified.cust.fullName,

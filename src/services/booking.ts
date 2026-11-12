@@ -118,7 +118,7 @@ export async function createAtomicBooking(input: CreateBookingInput) {
       throw new Error('El profesional seleccionado no está disponible.');
     }
 
-    const svcInfo = await resolveServiceForStaff(input.serviceIds, input.staffId);
+    const svcInfo = await resolveServiceForStaff(input.serviceIds, input.staffId, tx);
     if (!svcInfo) {
       throw new Error('El profesional seleccionado no realiza los servicios indicados.');
     }
@@ -281,7 +281,7 @@ export async function createAtomicBooking(input: CreateBookingInput) {
         recipient: result.customerRecord.email,
         customerId: result.customerRecord.id,
         appointmentId: result.appointment.id,
-        subject: `Confirmación de cita ${result.appointment.bookingCode} · Club Segorbe`,
+        subject: `Confirmación de cita ${result.appointment.bookingCode} · Barbería Segorbe`,
         body: `Tu cita queda confirmada para el ${dateLabel} a las ${timeLabel} con ${result.barberName}.`,
       });
     }
@@ -337,7 +337,7 @@ export async function rescheduleAppointment(params: {
     const serviceIds = apptSvcs.map((s) => s.serviceId);
 
     // Ensure target staff supports the booked services
-    const compat = await resolveServiceForStaff(serviceIds, targetStaffId);
+    const compat = await resolveServiceForStaff(serviceIds, targetStaffId, tx);
     if (!compat) {
       throw new Error('El profesional seleccionado no realiza alguno de los servicios de esta cita.');
     }

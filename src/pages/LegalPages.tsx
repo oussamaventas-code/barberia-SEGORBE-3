@@ -33,7 +33,7 @@ export default function LegalPages({ docType }: LegalPageProps) {
           className="inline-flex items-center gap-2 font-mono-data text-xs text-[#111111]/70 hover:text-[#E63B2E]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          <span>Volver a Club Segorbe</span>
+          <span>Volver a Barbería Segorbe</span>
         </Link>
 
         <article className="rounded-[2rem] border border-[#111111]/12 bg-[#F5F3EE] p-8 sm:p-12 space-y-6 text-sm leading-relaxed text-[#111111]/85">
@@ -69,10 +69,10 @@ export default function LegalPages({ docType }: LegalPageProps) {
               <p className="font-mono-data text-xs text-[#E63B2E]">LSSI-CE · ESPAÑA</p>
               <h1 className="font-display text-3xl font-bold text-[#111111]">Aviso Legal</h1>
               <p>
-                Titular del sitio web y del sistema de reservas <strong>Club Segorbe OS</strong>:
+                Titular del sitio web y del sistema de reservas <strong>Segorbe OS</strong>:
               </p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>Nombre comercial: {business?.businessName || 'Club Segorbe'}</li>
+                <li>Nombre comercial: {business?.businessName || 'Barbería Segorbe'}</li>
                 <li>Titular / Razón social: {entity}</li>
                 <li>NIF / CIF: {taxId}</li>
                 <li>Domicilio: {address}</li>
@@ -91,7 +91,7 @@ export default function LegalPages({ docType }: LegalPageProps) {
                 Política de Cookies
               </h1>
               <p>
-                Club Segorbe OS utiliza exclusivamente cookies y almacenamiento técnico estrictamente necesarios para mantener la seguridad de sesión en las áreas autenticadas y la integridad del proceso de reserva. No se utilizan cookies publicitarias de terceros.
+                Segorbe OS utiliza exclusivamente cookies y almacenamiento técnico estrictamente necesarios para mantener la seguridad de sesión en las áreas autenticadas y la integridad del proceso de reserva. No se utilizan cookies publicitarias de terceros.
               </p>
             </>
           )}

@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Base de datos local de demostración (PGlite) y secreto de sesión
+.data/

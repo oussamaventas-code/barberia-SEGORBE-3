@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../lib/api';
-import { formatEuro } from '../../types/domain';
+import { formatEuro, APPOINTMENT_STATUS_LABELS } from '../../types/domain';
 
 interface BookingRow {
   id: number;
@@ -154,7 +154,7 @@ export default function AdminBookingsList() {
                   <td className="px-5 py-3.5 text-right font-mono-data text-xs tabular-nums">
                     {formatEuro(r.totalPriceCents)}
                   </td>
-                  <td className="px-5 py-3.5 font-mono-data text-xs font-bold">{r.status}</td>
+                  <td className="px-5 py-3.5 font-mono-data text-xs font-bold">{APPOINTMENT_STATUS_LABELS[r.status] ?? r.status}</td>
                   <td className="px-5 py-3.5 text-right font-mono-data text-xs">
                     {r.status === 'CONFIRMED' && (
                       <div className="inline-flex gap-2">

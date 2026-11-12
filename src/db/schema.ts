@@ -16,11 +16,12 @@ export const profiles = pgTable('profiles', {
   uid: text('uid').notNull().unique(),
   email: text('email').notNull(),
   fullName: text('full_name'),
+  passwordHash: text('password_hash'), // scrypt hash (auth local de demostración)
   role: text('role').notNull().default('CUSTOMER'), // ADMIN | STAFF | CUSTOMER
   staffId: integer('staff_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [uniqueIndex('profiles_email_idx').on(table.email)]);
 
 // 2. customers — Barbería CRM clients
 export const customers = pgTable(
@@ -40,7 +41,7 @@ export const customers = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('customers_phone_idx').on(table.phone),
+    uniqueIndex('customers_phone_idx').on(table.phone),
     index('customers_email_idx').on(table.email),
   ]
 );
@@ -96,7 +97,7 @@ export const staffServices = pgTable(
 // 6. business_settings — Global barbería configuration (no invented contact/fiscal data)
 export const businessSettings = pgTable('business_settings', {
   id: serial('id').primaryKey(),
-  businessName: text('business_name').notNull().default('Club Segorbe'),
+  businessName: text('business_name').notNull().default('Barbería Segorbe'),
   city: text('city').notNull().default('Murcia'),
   address: text('address'),
   phone: text('phone'),

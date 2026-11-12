@@ -116,3 +116,19 @@ export function formatEuro(cents: number | null | undefined): string {
     currency: 'EUR',
   }).format(cents / 100);
 }
+
+export const APPOINTMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Pendiente',
+  CONFIRMED: 'Confirmada',
+  COMPLETED: 'Completada',
+  CANCELLED: 'Cancelada',
+  NO_SHOW: 'No presentado',
+};
+
+export const WAITLIST_STATUS_LABELS: Record<string, string> = {
+  WAITING: 'En espera',
+  OFFERED: 'Hueco ofrecido',
+  ACCEPTED: 'Aceptada',
+  EXPIRED: 'Caducada',
+  CANCELLED: 'Cancelada',
+};
