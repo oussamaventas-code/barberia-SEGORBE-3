@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { NoiseOverlay } from './components/NoiseOverlay';
+import { DemoStatus } from './components/DemoStatus';
 import HomePage from './pages/HomePage';
 import BookingPage from './pages/BookingPage';
 import ClientAreaPage from './pages/ClientAreaPage';
@@ -20,6 +21,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <NoiseOverlay />
+        <DemoStatus />
         <Suspense
           fallback={
             <div className="min-h-screen bg-[#111111] flex items-center justify-center font-mono-data text-xs text-[#E8E4DD]/70">

@@ -5,9 +5,11 @@ import { LogoLockup } from './Logo';
 
 interface NavbarProps {
   variant?: 'hero' | 'solid';
+  /** Oculta el botón "Pedir cita" (la portada ya tiene uno grande). */
+  hideCta?: boolean;
 }
 
-export function Navbar({ variant = 'hero' }: NavbarProps) {
+export function Navbar({ variant = 'hero', hideCta = false }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -57,6 +59,7 @@ export function Navbar({ variant = 'hero' }: NavbarProps) {
           </Link>
         </nav>
 
+{!hideCta && (
         <Link
           to="/reservar"
           className="cs-btn-signal inline-flex items-center gap-1.5 rounded-full bg-[#E63B2E] px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs font-semibold tracking-wide text-[#F5F3EE] whitespace-nowrap shrink-0"
@@ -64,6 +67,7 @@ export function Navbar({ variant = 'hero' }: NavbarProps) {
           <span>Pedir cita</span>
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
+        )}
       </div>
     </header>
   );
