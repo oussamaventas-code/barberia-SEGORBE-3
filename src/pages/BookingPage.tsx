@@ -88,10 +88,10 @@ function downloadIcsFile(booking: BookingSummary, businessName: string, address:
   const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Club Segorbe//Reservas//ES',
+    'PRODID:-//Barbería Segorbe//Reservas//ES',
     'BEGIN:VEVENT',
-    `UID:${booking.bookingCode}@clubsegorbe.es`,
-    `DTSTAMP:${start}`,
+    `UID:${booking.bookingCode}@barberiasegorbe.demo`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
     `DTSTART:${start}`,
     `DTEND:${end}`,
     `SUMMARY:${summary}`,
@@ -171,6 +171,11 @@ export default function BookingPage() {
       .then((res) => {
         setBoot(res);
         const preService = Number(searchParams.get('servicio'));
+        const preBarber = Number(searchParams.get('barbero'));
+        if (preBarber && res.staff.some((b) => b.id === preBarber)) {
+          setStaffSelectionMode('SPECIFIC');
+          setSelectedStaffId(preBarber);
+        }
         const active = res.services.filter((s) => s.isActive && s.isConfigured);
         if (preService && active.some((s) => s.id === preService)) {
           setSelectedServiceIds([preService]);
@@ -185,6 +190,7 @@ export default function BookingPage() {
             .catch(() => {});
         }
       })
+      .catch(() => setBoot(null))
       .finally(() => setLoadingBoot(false));
   }, [searchParams, todayMadrid]);
 
@@ -270,6 +276,8 @@ export default function BookingPage() {
       } else if (res.days[0]) {
         setSelectedDate(res.days[0].date);
       }
+    } catch (err: any) {
+      setSubmitError(err.message || 'No se pudo consultar la disponibilidad. Inténtalo de nuevo.');
     } finally {
       setLoadingWindow(false);
     }
@@ -964,7 +972,7 @@ export default function BookingPage() {
                             className="mt-0.5 h-4 w-4 accent-[#E63B2E]"
                           />
                           <span className="text-[11px] text-[#111111]/70">
-                            Acepto recibir avisos promocionales de Club Segorbe.
+                            Acepto recibir avisos promocionales de Barbería Segorbe.
                           </span>
                         </label>
                       </div>
@@ -1027,7 +1035,7 @@ export default function BookingPage() {
                     onClick={() =>
                       downloadIcsFile(
                         confirmedBooking,
-                        boot?.business?.businessName || 'Club Segorbe',
+                        boot?.business?.businessName || 'Barbería Segorbe',
                         boot?.business?.address ?? null
                       )
                     }

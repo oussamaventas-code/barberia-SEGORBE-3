@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -22,7 +23,14 @@ import {
   waitlist,
   workingHours,
 } from '../db/schema.ts';
-import { type AuthRequest, requireAdmin, requireAdminOrStaff, requireAuth } from '../middleware/auth.ts';
+import {
+  type AuthRequest,
+  requireAdmin,
+  requireAdminOrStaff,
+  requireAuth,
+  toAppProfile,
+} from '../middleware/auth.ts';
+import { createSessionToken, hashPassword, verifyPassword } from '../lib/session.ts';
 import { ensureSystemBootstrap } from '../services/bootstrap.ts';
 import { cancelAppointment, createAtomicBooking, recordAdminAudit, rescheduleAppointment } from '../services/booking.ts';
 import { getAllCustomers360, getCustomer360Detail } from '../services/crm.ts';
@@ -31,6 +39,34 @@ import { recordNotification } from '../services/notifications.ts';
 import { invalidateAvailabilityCache } from '../services/availability.ts';
 
 const router = Router();
+
+// Local login (demo auth: email + password stored as scrypt hash in `profiles`)
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1).max(200),
+});
+
+router.post('/auth/login', async (req, res) => {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Introduce un email y una contraseña válidos.' });
+  }
+  const email = parsed.data.email.trim().toLowerCase();
+  const [p] = await db.select().from(profiles).where(eq(profiles.email, email)).limit(1);
+  if (!p || !verifyPassword(parsed.data.password, p.passwordHash)) {
+    return res.status(401).json({ error: 'Email o contraseña incorrectos.' });
+  }
+  await recordAdminAudit({
+    actorUid: p.uid,
+    actorEmail: p.email,
+    actorRole: p.role,
+    action: 'LOGIN',
+    entityType: 'profile',
+    entityId: String(p.id),
+    ipAddress: req.ip ?? null,
+  });
+  res.json({ token: createSessionToken(p.uid), profile: toAppProfile(p) });
+});
 
 // Auth session info endpoint (any authenticated user)
 router.get('/auth/me', requireAuth, async (req: AuthRequest, res) => {
@@ -539,13 +575,31 @@ router.get('/customers/:id', async (req, res) => {
 router.patch('/customers/:id', async (req: AuthRequest, res) => {
   try {
     const id = Number(req.params.id);
-    const { fullName, phone, email, preferences, visitCadenceDays, relationshipStatus } = req.body;
+    const schema = z.object({
+      fullName: z.string().trim().min(2).max(120),
+      phone: z.string().trim().min(7).max(30),
+      email: z.string().email().optional().or(z.literal('')).nullable(),
+      preferences: z.string().max(1000).optional().nullable(),
+      visitCadenceDays: z.union([z.number(), z.string()]).optional().nullable(),
+      relationshipStatus: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Revisa nombre, teléfono y email del cliente.' });
+    }
+    const { fullName, preferences, visitCadenceDays, relationshipStatus } = parsed.data;
+    const phone = parsed.data.phone.replace(/[\s\-().]/g, '');
+    const email = parsed.data.email?.trim().toLowerCase() || null;
+    const [phoneOwner] = await db.select().from(customers).where(eq(customers.phone, phone)).limit(1);
+    if (phoneOwner && phoneOwner.id !== id) {
+      return res.status(409).json({ error: 'Ese teléfono ya pertenece a otro cliente.' });
+    }
     const [updated] = await db
       .update(customers)
       .set({
         fullName,
         phone,
-        email: email || null,
+        email,
         preferences: preferences ?? null,
         visitCadenceDays: visitCadenceDays ? Number(visitCadenceDays) : null,
         relationshipStatus: relationshipStatus || 'ACTIVE',
@@ -648,7 +702,7 @@ router.post('/crm/recovery-campaign', async (req: AuthRequest, res) => {
         channel,
         recipient: cust.email || cust.phone,
         customerId: cust.id,
-        subject: `Te echamos de menos en Club Segorbe`,
+        subject: `Te echamos de menos en Barbería Segorbe`,
         body: `Hola ${cust.fullName}, han pasado ${cust.daysSinceLastVisit} días desde tu última visita.`,
       });
       createdNotifications.push(notif);
@@ -887,16 +941,29 @@ router.post('/staff', requireAdmin, async (req: AuthRequest, res) => {
 router.put('/staff/:id', requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { name, roleTitle, bio, specialties, photoUrl, isActive, serviceIds } = req.body;
+    const schema = z.object({
+      name: z.string().trim().min(2).max(120),
+      roleTitle: z.string().trim().min(2).max(80),
+      bio: z.string().optional().nullable(),
+      specialties: z.string().optional().nullable(),
+      photoUrl: z.string().optional().nullable(),
+      isActive: z.boolean(),
+      serviceIds: z.array(z.number().int().positive()).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Datos de profesional inválidos.' });
+    }
+    const { name, roleTitle, bio, specialties, photoUrl, isActive, serviceIds } = parsed.data;
     const [updated] = await db
       .update(staff)
       .set({
         name,
         roleTitle,
-        bio: bio ?? null,
-        specialties: specialties ?? null,
-        photoUrl: photoUrl ?? null,
-        isActive: Boolean(isActive),
+        bio: bio || null,
+        specialties: specialties || null,
+        photoUrl: photoUrl || null,
+        isActive,
         updatedAt: new Date(),
       })
       .where(eq(staff.id, id))
@@ -906,7 +973,7 @@ router.put('/staff/:id', requireAdmin, async (req, res) => {
       await db.delete(staffServices).where(eq(staffServices.staffId, id));
       if (serviceIds.length > 0) {
         await db.insert(staffServices).values(
-          serviceIds.map((serviceId: number) => ({
+          serviceIds.map((serviceId) => ({
             staffId: id,
             serviceId,
           }))
@@ -1004,7 +1071,9 @@ router.get('/settings', async (_req, res) => {
     .from(staffAvailability)
     .where(isNull(staffAvailability.staffId))
     .orderBy(staffAvailability.date);
-  const userProfiles = await db.select().from(profiles).orderBy(desc(profiles.createdAt));
+  const userProfiles = (await db.select().from(profiles).orderBy(desc(profiles.createdAt))).map(
+    ({ passwordHash: _omit, ...rest }) => rest
+  );
 
   res.json({
     settings,
@@ -1095,6 +1164,79 @@ router.put('/settings', requireAdmin, async (req: AuthRequest, res) => {
   }
 });
 
+// Create a local user account (ADMIN only)
+router.post('/profiles', requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const schema = z.object({
+      email: z.string().email(),
+      fullName: z.string().min(2).max(120),
+      password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(200),
+      role: z.enum(['ADMIN', 'STAFF']),
+      staffId: z.number().int().positive().nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: parsed.error.issues[0]?.message || 'Datos de usuario inválidos.' });
+    }
+    const email = parsed.data.email.trim().toLowerCase();
+    const [exists] = await db.select().from(profiles).where(eq(profiles.email, email)).limit(1);
+    if (exists) return res.status(409).json({ error: 'Ya existe un usuario con ese email.' });
+
+    const [created] = await db
+      .insert(profiles)
+      .values({
+        uid: `local-${crypto.randomUUID()}`,
+        email,
+        fullName: parsed.data.fullName.trim(),
+        passwordHash: hashPassword(parsed.data.password),
+        role: parsed.data.role,
+        staffId: parsed.data.staffId ?? null,
+      })
+      .returning();
+
+    await recordAdminAudit({
+      actorUid: req.profile!.uid,
+      actorEmail: req.profile!.email,
+      actorRole: req.profile!.role,
+      action: 'CREATE_USER',
+      entityType: 'profile',
+      entityId: String(created.id),
+      details: `${email} (${parsed.data.role})`,
+    });
+
+    const { passwordHash: _omit, ...safe } = created;
+    res.status(201).json({ profile: safe });
+  } catch (error: any) {
+    res.status(400).json({ error: 'Error creando usuario.' });
+  }
+});
+
+// Reset a user's password (ADMIN only)
+router.post('/profiles/:id/password', requireAdmin, async (req: AuthRequest, res) => {
+  const password = String(req.body?.password || '');
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres.' });
+  }
+  const id = Number(req.params.id);
+  const [updated] = await db
+    .update(profiles)
+    .set({ passwordHash: hashPassword(password), updatedAt: new Date() })
+    .where(eq(profiles.id, id))
+    .returning({ id: profiles.id });
+  if (!updated) return res.status(404).json({ error: 'Usuario no encontrado.' });
+  await recordAdminAudit({
+    actorUid: req.profile!.uid,
+    actorEmail: req.profile!.email,
+    actorRole: req.profile!.role,
+    action: 'RESET_PASSWORD',
+    entityType: 'profile',
+    entityId: String(id),
+  });
+  res.json({ ok: true });
+});
+
 // Manage user roles (ADMIN only)
 router.patch('/profiles/:id/role', requireAdmin, async (req: AuthRequest, res) => {
   try {
@@ -1103,11 +1245,15 @@ router.patch('/profiles/:id/role', requireAdmin, async (req: AuthRequest, res) =
     if (!['ADMIN', 'STAFF', 'CUSTOMER'].includes(role)) {
       return res.status(400).json({ error: 'Rol inválido.' });
     }
+    if (id === req.profile!.id && role !== 'ADMIN') {
+      return res.status(400).json({ error: 'No puedes quitarte a ti mismo el rol de administrador.' });
+    }
     const [updated] = await db
       .update(profiles)
       .set({ role, staffId: staffId ?? null, updatedAt: new Date() })
       .where(eq(profiles.id, id))
       .returning();
+    if (!updated) return res.status(404).json({ error: 'Usuario no encontrado.' });
 
     await recordAdminAudit({
       actorUid: req.profile!.uid,
@@ -1119,7 +1265,8 @@ router.patch('/profiles/:id/role', requireAdmin, async (req: AuthRequest, res) =
       details: `Role -> ${role}`,
     });
 
-    res.json({ profile: updated });
+    const { passwordHash: _omit, ...safe } = updated;
+    res.json({ profile: safe });
   } catch (error: any) {
     res.status(400).json({ error: 'Error actualizando permisos.' });
   }

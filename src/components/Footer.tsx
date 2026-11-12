@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
+import { Instagram } from 'lucide-react';
 import { PublicBusinessInfo } from '../types/domain';
+import { LogoMark } from './Logo';
+import { BRAND } from '../lib/brand';
 
 interface FooterProps {
   business: PublicBusinessInfo | null;
@@ -12,9 +15,12 @@ export function Footer({ business, systemOperational }: FooterProps) {
       <div className="mx-auto max-w-6xl px-6 py-16">
         <div className="grid grid-cols-1 gap-12 md:grid-cols-12">
           <div className="md:col-span-5 space-y-4">
-            <h2 className="font-display text-2xl font-bold tracking-tight">
-              {business?.businessName || 'Club Segorbe'}
-            </h2>
+            <div className="flex items-center gap-3">
+              <LogoMark className="h-14 w-14" background="#111111" />
+              <h2 className="font-display text-2xl font-bold tracking-tight">
+                {business?.businessName || 'Barbería Segorbe'}
+              </h2>
+            </div>
             <p className="font-editorial text-xl text-[#E8E4DD]/80">
               Barbería contemporánea en {business?.city || 'Murcia'}.
             </p>
@@ -30,6 +36,14 @@ export function Footer({ business, systemOperational }: FooterProps) {
                 <p>Teléfono pendiente de configurar</p>
               )}
               {business?.email && <p>{business.email}</p>}
+              <a
+                href={BRAND.instagramUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 pt-1 hover:text-[#E63B2E] transition-colors"
+              >
+                <Instagram className="h-4 w-4" /> @{BRAND.instagramHandle}
+              </a>
             </div>
           </div>
 
@@ -54,8 +68,8 @@ export function Footer({ business, systemOperational }: FooterProps) {
                 </Link>
               </li>
               <li>
-                <Link to="/mis-citas" className="hover:text-[#E63B2E] transition-colors">
-                  Mis citas
+                <Link to="/admin" className="hover:text-[#E63B2E] transition-colors">
+                  Acceso equipo
                 </Link>
               </li>
             </ul>
@@ -92,11 +106,11 @@ export function Footer({ business, systemOperational }: FooterProps) {
 
         <div className="mt-12 flex flex-col gap-4 border-t border-[#F5F3EE]/10 pt-8 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-mono-data text-xs text-[#E8E4DD]/50">
-            © {new Date().getFullYear()} {business?.businessName || 'Club Segorbe'} · {business?.city || 'Murcia'}
+            © {new Date().getFullYear()} {business?.businessName || 'Barbería Segorbe'} · {business?.city || 'Murcia'}
           </p>
           {systemOperational && (
             <p className="font-mono-data text-xs text-[#E8E4DD]/70">
-              Sistema de reservas conectado en tiempo real ({business?.timezone || 'Europe/Madrid'})
+              Reservas online en tiempo real · Hora de Murcia
             </p>
           )}
         </div>

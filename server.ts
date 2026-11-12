@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import publicRoutes from './src/routes/public.ts';
 import adminRoutes from './src/routes/admin.ts';
+import { ensureSystemBootstrap, DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD } from './src/services/bootstrap.ts';
+import { dbLocation } from './src/db/index.ts';
 
 dotenv.config();
 
@@ -46,13 +48,20 @@ function rateLimit(maxRequests: number, windowMs: number) {
   };
 }
 
+// Periodic cleanup so the in-memory rate map never grows unbounded
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, rec] of rateMap) if (rec.resetAt < now) rateMap.delete(key);
+}, 60_000).unref();
+
 app.use('/api/public/bookings', rateLimit(20, 60_000));
 app.use('/api/public/lookup-customer', rateLimit(25, 60_000));
 app.use('/api/public/waitlist', rateLimit(15, 60_000));
+app.use('/api/admin/auth/login', rateLimit(10, 60_000));
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ ok: true, service: 'club-segorbe-os', timezone: 'Europe/Madrid' });
+  res.json({ ok: true, service: 'barberia-segorbe-os', timezone: 'Europe/Madrid', database: 'pglite-local' });
 });
 
 // API Routes
@@ -71,6 +80,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 async function startServer() {
+  await ensureSystemBootstrap();
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -81,14 +91,22 @@ async function startServer() {
   } else {
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
+    app.get('/{*splat}', (_req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Club Segorbe OS server running on http://0.0.0.0:${PORT}`);
+    console.log(`\n  Segorbe OS → http://localhost:${PORT}`);
+    console.log(`  Base de datos local: ${dbLocation}`);
+    if (!process.env.ADMIN_PASSWORD) {
+      console.log(`  Panel /admin  → ${DEMO_ADMIN_EMAIL} / ${DEMO_ADMIN_PASSWORD} (admin)`);
+      console.log(`                → ${DEMO_STAFF_EMAIL} / ${DEMO_STAFF_PASSWORD} (barbero)\n`);
+    }
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error('No se pudo arrancar el servidor:', error);
+  process.exit(1);
+});

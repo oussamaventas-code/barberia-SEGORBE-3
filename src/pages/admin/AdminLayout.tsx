@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../lib/api';
+import { LogoMark } from '../../components/Logo';
 
 interface AdminNotif {
   id: number;
@@ -33,6 +34,30 @@ interface AdminNotif {
   createdAt: string;
 }
 
+const EVENT_LABELS: Record<string, string> = {
+  NEW_BOOKING: 'Nueva reserva',
+  MODIFIED: 'Cita modificada',
+  CANCELLED: 'Cancelación',
+  REMINDER: 'Recordatorio',
+  NEW_CUSTOMER: 'Nuevo cliente',
+  SLOT_FREED: 'Hueco liberado',
+  DELIVERY_ERROR: 'Error de envío',
+  RECOVERY_CAMPAIGN: 'Campaña',
+};
+const CHANNEL_LABELS: Record<string, string> = {
+  INTERNAL: 'Interna',
+  EMAIL: 'Email',
+  SMS: 'SMS',
+  WHATSAPP: 'WhatsApp',
+};
+const STATUS_LABELS: Record<string, string> = {
+  QUEUED: 'Sin leer',
+  READ: 'Leída',
+  PENDING_PROVIDER: 'Envío pendiente',
+  SENT: 'Enviada',
+  FAILED: 'Fallida',
+};
+
 const NAV_ITEMS = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/admin/agenda', label: 'Agenda', icon: CalendarDays },
@@ -42,13 +67,27 @@ const NAV_ITEMS = [
   { to: '/admin/equipo', label: 'Equipo', icon: UserSquare2 },
   { to: '/admin/crm', label: 'CRM', icon: Sparkles },
   { to: '/admin/informes', label: 'Informes', icon: BarChart3 },
-  { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
+  { to: '/admin/configuracion', label: 'Configuración', icon: Settings, adminOnly: true },
 ];
 
 export default function AdminLayout() {
-  const { firebaseUser, profile, loading, authError, signInWithGoogle, logout, getToken } =
-    useAuth();
+  const { profile, loading, authError, signIn, logout, getToken } = useAuth();
   const navigate = useNavigate();
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSigningIn(true);
+    await signIn(loginEmail.trim(), loginPassword);
+    setSigningIn(false);
+  };
+
+  const fillDemo = (email: string, password: string) => {
+    setLoginEmail(email);
+    setLoginPassword(password);
+  };
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -93,41 +132,89 @@ export default function AdminLayout() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#111111] text-[#F5F3EE] flex items-center justify-center font-mono-data text-sm">
-        Verificando credenciales de Club Segorbe OS...
+        Verificando credenciales de Segorbe OS...
       </div>
     );
   }
 
   // Unauthenticated gate — never render CRM/admin data
-  if (!firebaseUser || !profile) {
+  if (!profile) {
     return (
-      <div className="min-h-screen bg-[#111111] text-[#F5F3EE] flex items-center justify-center px-6">
+      <div className="min-h-screen bg-[#111111] text-[#F5F3EE] flex items-center justify-center px-6 py-10">
         <div className="w-full max-w-md rounded-[2rem] border border-[#F5F3EE]/15 bg-[#191919] p-8 sm:p-10 space-y-6">
           <div>
-            <p className="font-mono-data text-xs tracking-widest text-[#E63B2E]">
-              ACCESO PRIVADO
-            </p>
-            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight">
-              CLUB SEGORBE OS
-            </h1>
+            <LogoMark className="mb-4 h-16 w-16" background="#191919" />
+            <p className="font-mono-data text-xs tracking-widest text-[#E63B2E]">ACCESO PRIVADO</p>
+            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight">BARBERÍA SEGORBE</h1>
             <p className="mt-2 text-sm text-[#E8E4DD]/70">
               Panel privado de dirección, agenda en tiempo real y CRM de la barbería.
             </p>
           </div>
 
-          {authError && (
-            <div className="rounded-xl border border-[#E63B2E] bg-[#E63B2E]/15 p-3 text-xs text-[#F5F3EE]">
-              {authError}
-            </div>
-          )}
+          <form onSubmit={handleLogin} className="space-y-3">
+            <label className="block">
+              <span className="font-mono-data text-[11px] uppercase tracking-wider text-[#E8E4DD]/60">Email</span>
+              <input
+                type="email"
+                required
+                autoComplete="username"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-[#F5F3EE]/15 bg-[#111111] px-4 py-3 text-sm text-[#F5F3EE] focus:border-[#E63B2E] focus:outline-none"
+                placeholder="tu@email.com"
+              />
+            </label>
+            <label className="block">
+              <span className="font-mono-data text-[11px] uppercase tracking-wider text-[#E8E4DD]/60">Contraseña</span>
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-[#F5F3EE]/15 bg-[#111111] px-4 py-3 text-sm text-[#F5F3EE] focus:border-[#E63B2E] focus:outline-none"
+                placeholder="••••••••"
+              />
+            </label>
 
-          <button
-            type="button"
-            onClick={signInWithGoogle}
-            className="cs-btn-signal w-full rounded-full bg-[#E63B2E] px-6 py-4 font-display text-sm font-bold text-[#F5F3EE]"
-          >
-            Iniciar sesión con Google
-          </button>
+            {authError && (
+              <div role="alert" className="rounded-xl border border-[#E63B2E] bg-[#E63B2E]/15 p-3 text-xs text-[#F5F3EE]">
+                {authError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={signingIn}
+              className="cs-btn-signal w-full rounded-full bg-[#E63B2E] px-6 py-4 font-display text-sm font-bold text-[#F5F3EE] disabled:opacity-60"
+            >
+              {signingIn ? 'Entrando…' : 'Entrar al panel'}
+            </button>
+          </form>
+
+          <div className="rounded-2xl border border-dashed border-[#F5F3EE]/20 p-4 space-y-2">
+            <p className="font-mono-data text-[11px] uppercase tracking-wider text-[#E8E4DD]/60">
+              Modo demostración · cuentas de prueba
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => fillDemo('admin@barberiasegorbe.demo', 'segorbe2026')}
+                className="rounded-xl border border-[#F5F3EE]/15 px-3 py-2 text-left text-xs hover:bg-[#F5F3EE]/10"
+              >
+                <span className="block font-display font-bold">Dueño</span>
+                <span className="font-mono-data text-[10px] text-[#E8E4DD]/60">Acceso total</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemo('barbero@barberiasegorbe.demo', 'barbero2026')}
+                className="rounded-xl border border-[#F5F3EE]/15 px-3 py-2 text-left text-xs hover:bg-[#F5F3EE]/10"
+              >
+                <span className="block font-display font-bold">Barbero</span>
+                <span className="font-mono-data text-[10px] text-[#E8E4DD]/60">Agenda y clientes</span>
+              </button>
+            </div>
+          </div>
 
           <div className="border-t border-[#F5F3EE]/10 pt-4 text-center">
             <Link to="/" className="font-mono-data text-xs text-[#E8E4DD]/60 hover:text-[#F5F3EE]">
@@ -170,6 +257,7 @@ export default function AdminLayout() {
   }
 
   const unreadCount = notifications.filter((n) => n.status === 'QUEUED').length;
+  const navItems = NAV_ITEMS.filter((item) => !('adminOnly' in item && item.adminOnly) || profile.role === 'ADMIN');
 
   return (
     <div className="min-h-screen bg-[#E8E4DD] text-[#111111] flex">
@@ -177,14 +265,17 @@ export default function AdminLayout() {
       <aside className="hidden lg:flex w-64 shrink-0 flex-col justify-between bg-[#111111] text-[#F5F3EE] p-5 border-r border-[#111111]">
         <div>
           <div className="border-b border-[#F5F3EE]/12 pb-5">
-            <Link to="/admin" className="font-display text-lg font-bold tracking-tight">
-              CLUB SEGORBE OS
+            <Link to="/admin" className="flex items-center gap-2.5 font-display text-lg font-bold tracking-tight">
+              <LogoMark className="h-9 w-9" background="#111111" />
+              SEGORBE OS
             </Link>
-            <p className="mt-1 font-mono-data text-xs text-[#E8E4DD]/50">Murcia · {profile.role}</p>
+            <p className="mt-1 font-mono-data text-xs text-[#E8E4DD]/50">
+              Murcia · {profile.role === 'ADMIN' ? 'Dirección' : 'Equipo'}
+            </p>
           </div>
 
           <nav className="mt-6 space-y-1">
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink
@@ -235,13 +326,13 @@ export default function AdminLayout() {
           <aside className="relative z-10 flex w-72 flex-col justify-between bg-[#111111] p-6 text-[#F5F3EE]">
             <div>
               <div className="flex items-center justify-between border-b border-[#F5F3EE]/12 pb-4">
-                <span className="font-display text-lg font-bold">CLUB SEGORBE OS</span>
-                <button type="button" onClick={() => setMobileMenuOpen(false)}>
+                <span className="font-display text-lg font-bold">SEGORBE OS</span>
+                <button type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Cerrar menú">
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <nav className="mt-6 space-y-1">
-                {NAV_ITEMS.map((item) => {
+                {navItems.map((item) => {
                   const Icon = item.icon;
                   return (
                     <NavLink
@@ -288,7 +379,7 @@ export default function AdminLayout() {
             </button>
             <div>
               <p className="font-display text-sm font-bold tracking-tight lg:hidden">
-                CLUB SEGORBE OS
+                SEGORBE OS
               </p>
               <p className="font-mono-data text-xs capitalize text-[#111111]/65">
                 {madridTodayLabel}
@@ -315,7 +406,10 @@ export default function AdminLayout() {
                 loadNotifications();
                 setNotifOpen((v) => !v);
               }}
-              className="relative flex items-center gap-1.5 rounded-full border border-[#111111]/15 bg-white px-3.5 py-1.5 font-mono-data text-xs"
+              aria-label={`Notificaciones (${unreadCount} sin leer)`}
+              className={`relative flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 font-mono-data text-xs ${
+                unreadCount > 0 ? 'border-[#E63B2E] bg-[#E63B2E] text-[#F5F3EE]' : 'border-[#111111]/15 bg-white'
+              }`}
             >
               <Bell className="h-3.5 w-3.5" />
               <span className="tabular-nums">{unreadCount}</span>
@@ -337,7 +431,7 @@ export default function AdminLayout() {
           <div className="fixed right-4 top-16 z-40 w-[calc(100%-2rem)] max-w-md rounded-[2rem] border border-[#111111]/15 bg-[#F5F3EE] p-5 shadow-xl">
             <div className="flex items-center justify-between border-b border-[#111111]/10 pb-3">
               <h2 className="font-display text-base font-bold">Centro de notificaciones</h2>
-              <button type="button" onClick={() => setNotifOpen(false)}>
+              <button type="button" onClick={() => setNotifOpen(false)} aria-label="Cerrar notificaciones">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -358,12 +452,15 @@ export default function AdminLayout() {
                   >
                     <div className="flex items-center justify-between gap-2 font-mono-data text-[11px]">
                       <span className="font-bold text-[#E63B2E]">
-                        {n.eventType} · {n.channel}
+                        {EVENT_LABELS[n.eventType] ?? n.eventType} · {CHANNEL_LABELS[n.channel] ?? n.channel}
                       </span>
-                      <span className="text-[#111111]/60">{n.status}</span>
+                      <span className="text-[#111111]/60">{STATUS_LABELS[n.status] ?? n.status}</span>
                     </div>
                     <p className="mt-1 font-display font-bold">{n.subject}</p>
                     <p className="mt-0.5 text-[#111111]/75">{n.body}</p>
+                    <p className="mt-1 font-mono-data text-[10px] text-[#111111]/45">
+                      {new Date(n.createdAt).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', dateStyle: 'short', timeStyle: 'short' })}
+                    </p>
                     {n.errorMessage && (
                       <p className="mt-1 font-mono-data text-[11px] text-[#B45309]">
                         {n.errorMessage}

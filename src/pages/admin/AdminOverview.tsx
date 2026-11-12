@@ -223,20 +223,29 @@ export default function AdminOverview() {
                   Todavía no hay reservas en este rango de fechas.
                 </div>
               ) : (
-                <div className="mt-6 flex h-44 items-end gap-2 border-b border-[#111111]/15 pb-2 overflow-x-auto">
+                <div className="mt-6 flex h-56 items-stretch gap-2 border-b border-[#111111]/15 pb-2 overflow-x-auto">
                   {data.charts.evolution.map((pt) => {
                     const heightPct = Math.max(8, Math.round((pt.total / maxEvolution) * 100));
                     return (
                       <div
                         key={pt.date}
-                        className="flex min-w-[36px] flex-1 flex-col items-center gap-1"
-                        title={`${pt.date}: ${pt.total} citas (${pt.completed} completadas)`}
+                        className="flex h-full min-w-[36px] flex-1 flex-col items-center gap-1"
+                        title={`${pt.date}: ${pt.total} citas (${pt.completed} completadas, ${pt.cancelled} canceladas)`}
                       >
                         <span className="font-mono-data text-[10px] tabular-nums">{pt.total}</span>
-                        <div
-                          style={{ height: `${heightPct}%` }}
-                          className="w-full max-w-[28px] rounded-t-md bg-[#111111] transition-all"
-                        />
+                        <div className="flex w-full flex-1 items-end justify-center">
+                          <div
+                            style={{ height: `${heightPct}%` }}
+                            className="flex w-full max-w-[28px] flex-col overflow-hidden rounded-t-md bg-[#111111] transition-all"
+                          >
+                            {pt.cancelled > 0 && (
+                              <div
+                                style={{ height: `${Math.round((pt.cancelled / Math.max(1, pt.total)) * 100)}%` }}
+                                className="w-full bg-[#E63B2E]"
+                              />
+                            )}
+                          </div>
+                        </div>
                         <span className="font-mono-data text-[10px] text-[#111111]/60">
                           {pt.date.slice(5)}
                         </span>

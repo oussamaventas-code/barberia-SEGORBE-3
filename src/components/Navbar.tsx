@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { LogoLockup } from './Logo';
 
 interface NavbarProps {
   variant?: 'hero' | 'solid';
@@ -31,9 +32,14 @@ export function Navbar({ variant = 'hero' }: NavbarProps) {
       >
         <Link
           to="/"
-          className="font-display text-xs sm:text-base font-bold tracking-tight whitespace-nowrap shrink-0"
+          aria-label="Barbería Segorbe, inicio"
+          className="text-xs sm:text-sm whitespace-nowrap shrink-0"
         >
-          CLUB SEGORBE
+          <LogoLockup
+            markClassName="h-7 w-7 sm:h-8 sm:w-8"
+            background={isLightSurface ? '#F5F3EE' : '#111111'}
+            className="[&>span:last-child]:hidden sm:[&>span:last-child]:inline"
+          />
         </Link>
 
         <nav className="flex items-center gap-4 sm:gap-7 text-xs sm:text-sm font-medium">

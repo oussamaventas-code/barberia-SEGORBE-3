@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bell, Calendar, Check, MousePointer2 } from 'lucide-react';
 
-const DEMO_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const DEMO_HOURS = ['10:00', '11:30', '13:00', '17:30', '19:00'];
+const DEMO_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+const DEMO_HOURS = ['10:00', '11:30', '13:00', '17:00', '19:30'];
 
 export function CalendarCursorShowcase() {
   const [step, setStep] = useState(0); // 0=idle, 1=day, 2=hour, 3=confirmed
@@ -52,7 +52,7 @@ export function CalendarCursorShowcase() {
       <div className="relative mt-6 space-y-5">
         <div>
           <p className="font-mono-data text-xs text-[#111111]/60 mb-2">01 · Selección de día</p>
-          <div className="grid grid-cols-6 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             {DEMO_DAYS.map((day, idx) => {
               const active = idx === selectedDayIdx;
               return (
