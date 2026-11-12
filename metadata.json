@@ -1,0 +1,8 @@
+{
+  "name": "Club Segorbe OS",
+  "description": "Sistema digital integral de barbería en Murcia: web pública, reservas en tiempo real con control de concurrencia, área de cliente, agenda inteligente y CRM.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

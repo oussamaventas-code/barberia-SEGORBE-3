@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --cs-paper: #E8E4DD;
+    --cs-offwhite: #F5F3EE;
+    --cs-signal: #E63B2E;
+    --cs-black: #111111;
+    --font-sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+    --font-serif: 'DM Serif Display', Georgia, serif;
+    --font-mono: 'Space Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--cs-paper);
+    color: var(--cs-black);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--cs-paper);
+    color: var(--cs-black);
+    overflow-x: hidden;
+  }
+}
+
+.font-display {
+  font-family: var(--font-sans);
+}
+
+.font-editorial {
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.font-mono-data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Brutalist Signal button sliding layer & micro-interactions */
+.cs-btn-signal {
+  position: relative;
+  overflow: hidden;
+  transition: transform 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94), background-color 200ms ease, color 200ms ease;
+}
+
+.cs-btn-signal:hover:not(:disabled) {
+  transform: scale(1.03) translateY(-1px);
+}
+
+.cs-btn-signal:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.cs-interactive {
+  transition: transform 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94), border-color 200ms ease, background-color 200ms ease;
+}
+
+.cs-interactive:hover {
+  transform: translateY(-1px);
+}
+
+/* Custom subtle scrollbars for admin console */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #E8E4DD;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #111111;
+  border-radius: 9999px;
+  border: 2px solid #E8E4DD;
+}
