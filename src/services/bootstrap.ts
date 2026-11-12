@@ -170,10 +170,16 @@ export function ensureSystemBootstrap(): Promise<void> {
       await runMigrations();
       const existing = await db.select().from(businessSettings).limit(1);
       if (existing.length === 0) {
-        if (process.env.DEMO_SEED === 'false') {
-          await seedBaseConfiguration();
-        } else {
-          await seedDemoData();
+        try {
+          if (process.env.DEMO_SEED === 'false') {
+            await seedBaseConfiguration();
+          } else {
+            await seedDemoData();
+          }
+        } catch (error) {
+          // Otra pestaña/proceso pudo cargar los datos a la vez: si ya existen, seguimos
+          const again = await db.select().from(businessSettings).limit(1);
+          if (again.length === 0) throw error;
         }
       }
       await ensureAdminAccount();
@@ -304,7 +310,7 @@ async function seedDemoData() {
     ]);
 
     // Clientes
-    const customerRows = [];
+    const customerRows: Array<typeof customers.$inferSelect> = [];
     const usedNames = new Set<string>(['Carlos Martínez']);
     const customerNames = ['Carlos Martínez'];
     while (customerNames.length < CUSTOMER_COUNT) {
@@ -315,6 +321,8 @@ async function seedDemoData() {
       }
     }
     const usedPhones = new Set<string>(['600111222']);
+    const customerValues: Array<typeof customers.$inferInsert> = [];
+    const consentByPhone = new Map<string, { marketing: boolean; channel: string; createdAt: Date }>();
     for (const [i, name] of customerNames.entries()) {
       let phone = '600111222';
       if (i > 0) {
@@ -325,33 +333,42 @@ async function seedDemoData() {
       const slug = name
         .toLowerCase()
         .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
+        .replace(/[\u0300-\u036f]/g, '')
         .split(' ');
       const createdAt = new Date(now.getTime() - (70 + Math.floor(rng() * 200)) * 86_400_000);
-      const [row] = await tx
-        .insert(customers)
-        .values({
-          publicCode: `CL-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
-          fullName: name,
-          phone,
-          email: rng() < 0.7 ? `${slug[0]}.${slug[slug.length - 1]}@correo.demo` : null,
-          preferredStaffId: rng() < 0.6 ? pick(staffRows).row.id : null,
-          preferences: rng() < 0.35 ? pick(['Degradado bajo, número 1 en laterales', 'Barba perfilada, sin bigote corto', 'Le gusta charlar de fútbol', 'Piel sensible: sin alcohol tras el afeitado', 'Siempre café solo']) : null,
-          relationshipStatus: 'ACTIVE',
-          createdAt,
-        })
-        .returning();
-      customerRows.push(row);
+      customerValues.push({
+        publicCode: `CL-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+        fullName: name,
+        phone,
+        email: rng() < 0.7 ? `${slug[0]}.${slug[slug.length - 1]}@correo.demo` : null,
+        preferredStaffId: rng() < 0.6 ? pick(staffRows).row.id : null,
+        preferences: rng() < 0.35 ? pick(['Degradado bajo, número 1 en laterales', 'Barba perfilada, sin bigote corto', 'Le gusta charlar de fútbol', 'Piel sensible: sin alcohol tras el afeitado', 'Siempre café solo']) : null,
+        relationshipStatus: 'ACTIVE',
+        createdAt,
+      });
       const marketing = rng() < 0.6;
-      await tx.insert(communicationConsents).values({
-        customerId: row.id,
-        privacyPolicyAccepted: true,
-        privacyPolicyAcceptedAt: createdAt,
-        marketingOptIn: marketing,
-        marketingOptInAt: marketing ? createdAt : null,
-        preferredChannel: marketing ? pick(['WHATSAPP', 'EMAIL', 'SMS']) : 'NONE',
+      consentByPhone.set(phone, {
+        marketing,
+        channel: marketing ? pick(['WHATSAPP', 'EMAIL', 'SMS']) : 'NONE',
+        createdAt,
       });
     }
+    const insertedCustomers = await tx.insert(customers).values(customerValues).returning();
+    const byPhone = new Map(insertedCustomers.map((c) => [c.phone, c]));
+    for (const v of customerValues) customerRows.push(byPhone.get(v.phone)!);
+    await tx.insert(communicationConsents).values(
+      customerRows.map((c) => {
+        const info = consentByPhone.get(c.phone)!;
+        return {
+          customerId: c.id,
+          privacyPolicyAccepted: true,
+          privacyPolicyAcceptedAt: info.createdAt,
+          marketingOptIn: info.marketing,
+          marketingOptInAt: info.marketing ? info.createdAt : null,
+          preferredChannel: info.channel,
+        };
+      })
+    );
 
     // Agenda: ocupación por profesional y día para evitar solapes
     const occupied = new Map<string, Array<[number, number]>>();
@@ -389,6 +406,20 @@ async function seedDemoData() {
 
     let demoBookingAssigned = false;
 
+    // Las citas se acumulan y se insertan por lotes al final (mucho más rápido, sobre todo en el navegador)
+    type PendingAppt = {
+      values: typeof appointments.$inferInsert;
+      svcs: Array<(typeof svcRows)[number]>;
+      customer: (typeof customerRows)[number];
+      barberName: string;
+      status: 'COMPLETED' | 'CONFIRMED' | 'CANCELLED' | 'NO_SHOW';
+      price: number;
+      endAtUtc: Date;
+      createdAt: Date;
+      method: string;
+    };
+    const pending: PendingAppt[] = [];
+
     const createAppt = async (opts: {
       date: string;
       staffIndex: number;
@@ -406,9 +437,8 @@ async function seedDemoData() {
       const startAtUtc = madridLocalToUtc(opts.date, minutesToTime(opts.startMin));
       const endAtUtc = new Date(startAtUtc.getTime() + duration * 60_000);
       const createdAt = new Date(Math.min(startAtUtc.getTime() - (1 + Math.floor(rng() * 6)) * 86_400_000, now.getTime() - 3_600_000));
-      const [appt] = await tx
-        .insert(appointments)
-        .values({
+      pending.push({
+        values: {
           bookingCode: opts.code ?? bookingCode(),
           accessToken: opts.token ?? crypto.randomBytes(20).toString('hex'),
           customerId: opts.customer.id,
@@ -423,50 +453,83 @@ async function seedDemoData() {
           cancellationReason: opts.status === 'CANCELLED' ? pick(['Me ha surgido un imprevisto', 'Viaje de trabajo', 'Estoy enfermo']) : null,
           createdAt,
           updatedAt: createdAt,
-        })
-        .returning();
-      await tx.insert(appointmentServices).values(
-        svcs.map((s) => ({
-          appointmentId: appt.id,
-          serviceId: s.id,
-          serviceNameSnapshot: s.name,
-          priceCentsSnapshot: s.priceCents,
-          durationMinutesSnapshot: s.durationMinutes!,
-        }))
-      );
-      await tx.insert(appointmentEvents).values({
-        appointmentId: appt.id,
-        eventType: 'CREATED',
-        actorRole: 'CUSTOMER',
-        actorLabel: opts.customer.fullName,
-        newStatus: 'CONFIRMED',
-        details: `Reserva ${appt.bookingCode} confirmada con ${barber.name}.`,
+        },
+        svcs,
+        customer: opts.customer,
+        barberName: barber.name,
+        status: opts.status,
+        price,
+        endAtUtc,
         createdAt,
+        method: pick(['CARD', 'CARD', 'CASH', 'BIZUM']),
       });
-      if (opts.status !== 'CONFIRMED') {
-        await tx.insert(appointmentEvents).values({
-          appointmentId: appt.id,
-          eventType: opts.status === 'CANCELLED' ? 'CANCELLED' : 'STATUS_CHANGED',
-          actorRole: opts.status === 'CANCELLED' ? 'CUSTOMER' : 'STAFF',
-          actorLabel: opts.status === 'CANCELLED' ? opts.customer.fullName : barber.name,
-          previousStatus: 'CONFIRMED',
-          newStatus: opts.status,
-          details: opts.status === 'COMPLETED' ? 'Servicio completado.' : opts.status === 'NO_SHOW' ? 'El cliente no se presentó.' : 'Cancelación registrada.',
-          createdAt: opts.status === 'CANCELLED' ? appt.cancelledAt! : endAtUtc,
-        });
+    };
+
+    const flushAppointments = async () => {
+      const usedCodes = new Set<string>();
+      for (const item of pending) {
+        while (usedCodes.has(item.values.bookingCode)) item.values.bookingCode = bookingCode();
+        usedCodes.add(item.values.bookingCode);
       }
-      if (opts.status === 'COMPLETED') {
-        await tx.insert(payments).values({
-          appointmentId: appt.id,
-          customerId: opts.customer.id,
-          amountCents: price,
-          method: pick(['CARD', 'CARD', 'CASH', 'BIZUM']),
-          status: 'PAID',
-          paidAt: endAtUtc,
-          createdAt: endAtUtc,
-        });
+      const CHUNK = 150;
+      for (let i = 0; i < pending.length; i += CHUNK) {
+        const slice = pending.slice(i, i + CHUNK);
+        const inserted = await tx
+          .insert(appointments)
+          .values(slice.map((x) => x.values))
+          .returning({ id: appointments.id, bookingCode: appointments.bookingCode });
+        const idByCode = new Map(inserted.map((r) => [r.bookingCode, r.id]));
+        const svcValues: Array<typeof appointmentServices.$inferInsert> = [];
+        const eventValues: Array<typeof appointmentEvents.$inferInsert> = [];
+        const paymentValues: Array<typeof payments.$inferInsert> = [];
+        for (const item of slice) {
+          const id = idByCode.get(item.values.bookingCode)!;
+          for (const s of item.svcs) {
+            svcValues.push({
+              appointmentId: id,
+              serviceId: s.id,
+              serviceNameSnapshot: s.name,
+              priceCentsSnapshot: s.priceCents,
+              durationMinutesSnapshot: s.durationMinutes!,
+            });
+          }
+          eventValues.push({
+            appointmentId: id,
+            eventType: 'CREATED',
+            actorRole: 'CUSTOMER',
+            actorLabel: item.customer.fullName,
+            newStatus: 'CONFIRMED',
+            details: `Reserva ${item.values.bookingCode} confirmada con ${item.barberName}.`,
+            createdAt: item.createdAt,
+          });
+          if (item.status !== 'CONFIRMED') {
+            eventValues.push({
+              appointmentId: id,
+              eventType: item.status === 'CANCELLED' ? 'CANCELLED' : 'STATUS_CHANGED',
+              actorRole: item.status === 'CANCELLED' ? 'CUSTOMER' : 'STAFF',
+              actorLabel: item.status === 'CANCELLED' ? item.customer.fullName : item.barberName,
+              previousStatus: 'CONFIRMED',
+              newStatus: item.status,
+              details: item.status === 'COMPLETED' ? 'Servicio completado.' : item.status === 'NO_SHOW' ? 'El cliente no se presentó.' : 'Cancelación registrada.',
+              createdAt: item.status === 'CANCELLED' ? (item.values.cancelledAt as Date) : item.endAtUtc,
+            });
+          }
+          if (item.status === 'COMPLETED') {
+            paymentValues.push({
+              appointmentId: id,
+              customerId: item.customer.id,
+              amountCents: item.price,
+              method: item.method,
+              status: 'PAID',
+              paidAt: item.endAtUtc,
+              createdAt: item.endAtUtc,
+            });
+          }
+        }
+        if (svcValues.length) await tx.insert(appointmentServices).values(svcValues);
+        if (eventValues.length) await tx.insert(appointmentEvents).values(eventValues);
+        if (paymentValues.length) await tx.insert(payments).values(paymentValues);
       }
-      return appt;
     };
 
     const comboOptions: string[][] = [
@@ -541,6 +604,8 @@ async function seedDemoData() {
         }
       }
     }
+
+    await flushAppointments();
 
     // Notas privadas de CRM
     const noteSamples: Array<[number, string, string]> = [
@@ -631,18 +696,13 @@ async function seedDemoData() {
     });
   });
 
-  // Ajusta el estado de relación según el historial
-  const counts = await db
-    .select({ customerId: appointments.customerId, n: sql<number>`count(*)::int` })
-    .from(appointments)
-    .where(eq(appointments.status, 'COMPLETED'))
-    .groupBy(appointments.customerId);
-  for (const c of counts) {
-    await db
-      .update(customers)
-      .set({ relationshipStatus: c.n >= 5 ? 'FREQUENT' : c.n >= 2 ? 'ACTIVE' : 'NEW' })
-      .where(eq(customers.id, c.customerId));
-  }
+  // Ajusta el estado de relación según el historial (una sola sentencia)
+  await db.execute(sql`
+    UPDATE customers c SET relationship_status = CASE
+      WHEN x.n >= 5 THEN 'FREQUENT' WHEN x.n >= 2 THEN 'ACTIVE' ELSE 'NEW' END
+    FROM (SELECT customer_id, count(*)::int AS n FROM appointments WHERE status = 'COMPLETED' GROUP BY customer_id) x
+    WHERE c.id = x.customer_id
+  `);
 
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(appointments);
   console.log(`[demo] Datos cargados: ${CUSTOMER_COUNT} clientes, ${TEAM.length} barberos, ${n} citas.`);

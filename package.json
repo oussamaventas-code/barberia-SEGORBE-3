@@ -10,7 +10,9 @@
     "db:generate": "drizzle-kit generate --config src/db/drizzle.config.ts",
     "db:reset": "rm -rf .data && echo 'Base de datos local borrada. Se recreará con datos demo al arrancar.'",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "preview": "vite preview --port 4173",
+    "build:server": "VITE_API_MODE=server vite build"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.0",

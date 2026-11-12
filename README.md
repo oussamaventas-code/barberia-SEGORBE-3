@@ -2,9 +2,9 @@
 
 Sistema digital para **Barbería Segorbe** (C. Jesús Esteban, Murcia): web pública, reservas online en tiempo real, área de cliente y panel privado con agenda, CRM e informes.
 
-> **Modo demostración.** La base de datos es **local** (PGlite, un PostgreSQL embebido que guarda los datos en `.data/`). No hace falta instalar ningún servidor de base de datos ni conectar nada en la nube. Al arrancar por primera vez se carga un conjunto de datos de ejemplo realista.
+> **Modo demostración (sin servidor).** La base de datos funciona **dentro del navegador**: es un PostgreSQL real (PGlite) que guarda los datos en el propio móvil u ordenador. Cada dispositivo tiene su agenda temporal. Si reservas desde la web y luego entras al panel en ese mismo navegador, ves la cita al momento. No hace falta servidor ni conectar nada en la nube.
 
-## Arrancar en 2 comandos
+## Probarlo en local
 
 Requisitos: Node.js 20 o superior.
 
@@ -16,9 +16,19 @@ npm install
 npm run dev
 ```
 
-Abre <http://localhost:3000>.
+Abre <http://localhost:3000>. La primera visita en cada dispositivo tarda unos 4 segundos en preparar la agenda con los datos de ejemplo; después va instantáneo.
 
-La primera vez tarda unos segundos más mientras crea la base de datos y carga los datos demo.
+## Publicarlo para enseñarlo (hosting estático)
+
+```bash
+npm run build
+```
+
+Sube la carpeta `dist/` a cualquier hosting estático: Cloudflare Pages, Netlify (puedes arrastrar la carpeta a app.netlify.com/drop) o Vercel. Ya incluye `_redirects` y `vercel.json` para que funcionen las rutas como `/reservar` o `/admin`. Para comprobar el build en local antes de subirlo: `npm run preview`.
+
+- **Reiniciar la demo** (borrar las citas de prueba de ese dispositivo): botón "Reiniciar demo" en el menú lateral del panel.
+- **Varias pestañas**: la pestaña que estás usando es la dueña de los datos; al volver a otra pestaña, se recarga sola con los datos al día.
+- **Backend real más adelante**: `npm run build:server` compila el frontend para usar la API Express (`/api/*`) con la base en el servidor en vez de en el navegador.
 
 ## Accesos de demostración
 
@@ -32,7 +42,7 @@ En la pantalla de login hay botones para rellenar estas credenciales con un clic
 
 ## Qué incluye la demo
 
-- **Web pública** (`/`): portada, carta de servicios con precios, equipo, cómo reservar, horario y ubicación.
+- **Portada** (`/`): una sola pantalla sin scroll pensada para móvil, con botón grande de Pedir cita, valoración de Google, horario y dirección.
 - **Reserva online** (`/reservar`): 3 pasos (servicio → barbero, día y hora → datos). Solo muestra huecos realmente libres y evita dobles reservas aunque dos personas pulsen a la vez.
 - **Área de cliente** (`/mi-cita`): consultar, cambiar o cancelar una cita, historial y descarga de datos personales (RGPD).
 - **Panel privado** (`/admin`): resumen con KPIs, agenda diaria, semanal y mensual, citas manuales, bloqueos, cobros, ficha de cliente 360°, segmentación CRM, campaña de recuperación de clientes inactivos, catálogo, equipo y horarios, informes, auditoría y gestión de usuarios.

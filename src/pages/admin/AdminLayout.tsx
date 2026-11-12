@@ -20,6 +20,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../lib/api';
 import { LogoMark } from '../../components/Logo';
+import { ResetDemoButton } from '../../components/DemoStatus';
 
 interface AdminNotif {
   id: number;
@@ -305,6 +306,7 @@ export default function AdminLayout() {
           >
             Ver web pública →
           </Link>
+          <ResetDemoButton className="block font-mono-data text-xs text-[#E8E4DD]/60 hover:text-[#E63B2E]" />
           <button
             type="button"
             onClick={logout}
@@ -353,6 +355,7 @@ export default function AdminLayout() {
                 })}
               </nav>
             </div>
+            <ResetDemoButton className="mb-4 block text-left font-mono-data text-xs text-[#E8E4DD]/60" />
             <button
               type="button"
               onClick={logout}
